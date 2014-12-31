@@ -24,6 +24,7 @@ var freebsdchina = {},
     allPosts = [],
     noImage = true,
     showConsoleMessage = true,
+    anonsync = false;
     testUrl = 'https://www.freebsdchina.org/forum/forum_27.html';
 
 page.viewportSize = { width: 1024, height: 768 };
@@ -103,7 +104,7 @@ freebsdchina.fetchList = function (url, callback) {
                                     }
                                 } else {
                                     m = link.match(/start=(\d+)/);
-                                    if (m[1] > pageStartMax) {
+                                    if (m && m[1] > pageStartMax) {
                                         pageStartMax = m[1];
                                     }
                                     pagesLink = link;
@@ -445,27 +446,82 @@ page.onConsoleMessage = function (msg) {
     }
 };
 
-function syncList(url, callback) {
+function syncList(url, listOpts, callback) {
     'use strict';
-    var listOutput, m;
+    var listOutput,
+        listDeltaOutput,
+        previousListJSON,
+        previousListTmp,
+        previousList = {},
+        m;
+
     m = url.match(/_(\d+)\.html/);
     if (m && m[1]) {
         listOutput = 'freebsdchina.list.' + m[1] + '.json';
-        console.log('Updated ' + listOutput);
+        listDeltaOutput = 'freebsdchina.list.' + m[1] + '.delta.json';
+
+        if (listOpts && listOpts.delta) {
+            if (!fs.exists(listOutput)) {
+                listOpts.delta = false;
+            }
+        }
+
+        if (listOpts && listOpts.delta) {
+            previousListJSON = fs.read(listOutput);
+            previousListTmp = JSON.parse(previousListJSON);
+            // console.log('syncList: ' + previousListTmp.length);
+            previousListTmp.forEach(function (entry) {
+                // console.log('syncList Tmp: ' + entry.id);
+                previousList[entry.id] = entry;
+            });
+            console.log('syncList: Loaded ' + Object.keys(previousList).length);
+        }
 
         freebsdchina.fetchList(url, function (result) {
             var posts = [];
-            fs.write(listOutput, JSON.stringify(result, undefined, 4), 'w');
+            if (result.length > 0) {
+                fs.write(listOutput, JSON.stringify(result, undefined, 4), 'w');
+                console.log('Updated ' + listOutput + ': ' + result.length);
+            } else {
+                exit();
+            }
 
-            result.forEach(function (entry) {
-                if (entry.hasOwnProperty('pages')) {
-                    entry.pages.forEach(function (link) {
-                        posts.push(link);
-                    });
-                } else {
-                    posts.push(entry.url);
-                }
-            });
+            if (listOpts && listOpts.delta) {
+                result.forEach(function (entry) {
+                    var newPost = false;
+                    if (previousList.hasOwnProperty(entry.id)) {
+                        if (entry.reply !== previousList[entry.id].reply) {
+                            // console.log(entry.reply + ' ' + previousList[entry.id].reply);
+                            newPost = true;
+                        }
+                    } else {
+                        newPost = true;
+                    }
+
+                    if (newPost) {
+                        if (entry.hasOwnProperty('pages')) {
+                            entry.pages.forEach(function (link) {
+                                posts.push(link);
+                                console.log('NEW: ' + link);
+                            });
+                        } else {
+                            posts.push(entry.url);
+                            console.log('NEW: ' + entry.url);
+                        }
+                    }
+                });
+                fs.write(listDeltaOutput, JSON.stringify(posts, undefined, 4), 'w');
+            } else {
+                result.forEach(function (entry) {
+                    if (entry.hasOwnProperty('pages')) {
+                        entry.pages.forEach(function (link) {
+                            posts.push(link);
+                        });
+                    } else {
+                        posts.push(entry.url);
+                    }
+                });
+            }
             callback(posts);
         });
     }
@@ -475,6 +531,11 @@ function syncPost(url, callback) {
     'use strict';
     freebsdchina.fetchPost(url, function (post) {
         post.forEach(function (entry) {
+            // add deleteUrl and editUrl for anonsync
+            if (anonsync) {
+                entry.deleteUrl = 'https://www.freebsdchina.org/forum/posting.php?mode=delete&p=' + entry.id;
+                entry.editUrl = 'https://www.freebsdchina.org/forum/posting.php?mode=editpost&p=' + entry.id;
+            }
             allPosts.push(entry);
         });
         callback();
@@ -508,7 +569,7 @@ function deletePost(url, callback) {
 
 function syncAll(url, callback) {
     'use strict';
-    syncList(url, function (posts) {
+    syncList(url, {delta: true}, function (posts) {
         async.mapSeries(posts, syncPost, function () {
             console.log('Done: ' + url);
             callback();
@@ -550,6 +611,16 @@ if (target === 'sync') {
             }
         });
         page.onLoadFinished = function () { return; };
+    });
+}
+
+if (target === 'anonsync') {
+    showConsoleMessage = false;
+    anonsync = true;
+    async.mapSeries(listUrl, syncAll, function () {
+        fs.write(allPostsOutput, JSON.stringify(allPosts, undefined, 4), 'w');
+        console.log('Updated ' + allPostsOutput);
+        exit();
     });
 }
 
