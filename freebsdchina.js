@@ -4,18 +4,22 @@ var fs = require('fs'),
     async = require('./async'),
     system = require('system'),
     page = require("webpage").create(),
-    jqueryJS  = fs.workingDirectory +  '/jquery-1.11.1.min.js';
+    jqueryJS  = './jquery-1.11.1.min.js';
 
 var listUrl = [
-    'https://www.freebsdchina.org/forum/forum_27.html',
-    'https://www.freebsdchina.org/forum/forum_65.html',
-    'https://www.freebsdchina.org/forum/forum_3.html'
+    'https://www.freebsdchina.org/forum/viewforum.php?f=27',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=65',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=3',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=50',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=77',
+    // 'https://www.freebsdchina.org/forum/viewforum.php?f=46',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=64'
     ];
 
-var configJSON = fs.read('freebsdchina.config.json'),
-    config = JSON.parse(configJSON);
-
-var freebsdchina = {},
+var config = {},
+    spambotIdsJson = fs.read('freebsdchina.spambotIds.json'),
+    loginJson = fs.read('freebsdchina.account.json'),
+    freebsdchina = {},
     defaultViewportSize = { width: 1024, height: 768 },
     previousRequestMethod,
     abortRequest = [],
@@ -31,6 +35,8 @@ var freebsdchina = {},
     spamOutput = cacheDir + '/freebsdchina.spam.json',
     abortRequestOutput = cacheDir + '/freebsdchina.abortRqeuest.json';
 
+config.spambotIds = JSON.parse(spambotIdsJson);
+config.login = JSON.parse(loginJson);
 
 page.viewportSize = defaultViewportSize;
 page.settings.userAgent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.42 Safari/537.36';
@@ -43,7 +49,8 @@ freebsdchina.checkRequestUrl = function (url) {
 
 function loadjQuery(callback) {
     var load = page.evaluate(function () {
-        if (typeof jQuery == 'undefined') {
+        var jQueryt = typeof $;
+        if (jQueryt === 'undefined') {
             return true;
         }
         return false;
@@ -51,11 +58,13 @@ function loadjQuery(callback) {
 
     if (load) {
         if (page.injectJs(jqueryJS)) {
-            console.log('Loading ' + jqueryJS + ' successful');
+            console.log('loadjQuery: Loading ' + jqueryJS + ' successful');
             callback();
         } else {
-            consloe.log('Loading ' + jqueryJS + ' failed');
+            console.log('loadjQuery: Loading ' + jqueryJS + ' failed');
         }
+    } else {
+        callback();
     }
 }
 
@@ -122,7 +131,7 @@ freebsdchina.fetchList = function (url, callback) {
     page.open(url, function (status) {
         var result;
         if (status === 'success') {
-            if (page.injectJs(jqueryJS)) {
+            loadjQuery(function () {
                 result =  page.evaluate(function () {
                     $('a').filter(function () {
                         return $(this).text() === '下一页';
@@ -195,7 +204,7 @@ freebsdchina.fetchList = function (url, callback) {
                     });
                     return list;
                 });
-            }
+            });
         } else {
             console.log(url + ': ' + status);
             phantom.exit();
@@ -210,7 +219,7 @@ freebsdchina.fetchPost = function (url, callback, options) {
     page.open(url, function (status) {
         var result;
         if (status === 'success') {
-            if (page.injectJs(jqueryJS)) {
+            loadjQuery(function () {
                 result =  page.evaluate(function (opt) {
 
                     var posts = [],
@@ -315,7 +324,7 @@ freebsdchina.fetchPost = function (url, callback, options) {
                     });
                     return posts;
                 }, opt);
-            }
+            });
         } else {
             console.log(url + ': ' + status);
         }
@@ -342,7 +351,7 @@ freebsdchina.doLogin = function (callback) {
     freebsdchina.loadLoginPage(function () {
         console.log('DEBUG doLogin0: ' + page.frameUrl);
         if (page.frameUrl.match(/login\.php/)) {
-            if (page.injectJs(jqueryJS)) {
+            loadjQuery(function () {
                 var r =  page.evaluate(function () {
                     var pos = {};
                     pos.username = $('input[name=username]').offset();
@@ -397,7 +406,7 @@ freebsdchina.doLogin = function (callback) {
                         callback();
                     }
                 };
-            }
+            });
         }
     });
 };
@@ -405,7 +414,6 @@ freebsdchina.doLogin = function (callback) {
 freebsdchina.checkLoginStatus = function (callback) {
     'use strict';
     if (page.frameUrl.match(/index\.php/)) {
-        // if (page.injectJs(jqueryJS)) {
         loadjQuery(function () {
             var result = page.evaluate(function (username) {
                 var testLogin = {},
@@ -540,7 +548,7 @@ freebsdchina.deletePost = function (deleteUrl, callback) {
     page.open(deleteUrl, function (status) {
         var confirmButton;
         if (status === 'success') {
-            if (page.injectJs(jqueryJS)) {
+            loadjQuery(function () {
                 confirmButton =  page.evaluate(function () {
                     // FIXME: 您确定要删除这个主题吗？
                     return $('input[name=confirm]').offset();
@@ -564,7 +572,7 @@ freebsdchina.deletePost = function (deleteUrl, callback) {
                     console.log('freebsdchina.deletePost: confirmButton not found');
                     callback();
                 }
-            }
+            });
         } else {
             console.log(deleteUrl + ': ' + status);
             phantom.exit();
@@ -647,7 +655,8 @@ function syncList(url, listOpts, callback) {
         ts = time(),
         m;
 
-    m = url.match(/_(\d+)\.html/);
+    // m = url.match(/_(\d+)\.html/);
+    m = url.match(/viewforum\.php\?f=(\d+)/);
     if (m && m[1]) {
         listOutput = cacheDir + '/freebsdchina.list.' + m[1] + '.' + ts + '.json';
         listDeltaOutput = cacheDir + '/freebsdchina.list.' + m[1] + '.delta.json';
@@ -890,7 +899,7 @@ function doListSpam() {
         spamPosts = [];
 
     posts.forEach(function (entry) {
-        if (config.spamAuthors.indexOf(entry.author) !== -1) {
+        if (config.spambotIds.indexOf(entry.author) !== -1) {
             spamPosts.push(entry);
         }
     });
