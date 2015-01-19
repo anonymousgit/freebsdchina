@@ -12,6 +12,8 @@ var listUrl = [
     'https://www.freebsdchina.org/forum/viewforum.php?f=3',
     'https://www.freebsdchina.org/forum/viewforum.php?f=50',
     'https://www.freebsdchina.org/forum/viewforum.php?f=77',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=68',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=58',
     // 'https://www.freebsdchina.org/forum/viewforum.php?f=46',
     'https://www.freebsdchina.org/forum/viewforum.php?f=64'
     ];
