@@ -584,6 +584,8 @@ freebsdchina.deletePost = function (deleteUrl, callback) {
 
 page.onResourceRequested = function (requestData, request) {
     'use strict';
+    var httpsUrl;
+
     if (freebsdchina.checkRequestUrl(requestData.url)) {
         if (abortRequest.indexOf(requestData.url) === -1) {
             abortRequest.push(requestData.url);
@@ -594,7 +596,14 @@ page.onResourceRequested = function (requestData, request) {
             request.abort();
         }
     } else {
-        console.log('Requested: ' + requestData.url);
+        if (requestData.url.match(/http:\/\/.*\.freebsdchina\.org/)) {
+            httpsUrl = requestData.url.replace(/^http:/i, 'https:');
+            request.changeUrl(httpsUrl);
+            console.log('Requested(http): ' + httpsUrl);
+        } else {
+            console.log('Requested: ' + requestData.url);
+        }
+
         previousRequestMethod = requestData.method;
         if (requestData.url.match(/login\.php/) && requestData.method !== 'GET') {
             console.log(JSON.stringify(requestData, undefined, 4));
