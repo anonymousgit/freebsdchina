@@ -11,6 +11,7 @@ var listUrl = [
     'https://www.freebsdchina.org/forum/viewforum.php?f=65',
     'https://www.freebsdchina.org/forum/viewforum.php?f=3',
     'https://www.freebsdchina.org/forum/viewforum.php?f=50',
+    'https://www.freebsdchina.org/forum/viewforum.php?f=51',
     'https://www.freebsdchina.org/forum/viewforum.php?f=77',
     'https://www.freebsdchina.org/forum/viewforum.php?f=68',
     'https://www.freebsdchina.org/forum/viewforum.php?f=58',
@@ -785,7 +786,7 @@ function deletePost(url, callback) {
 function doSyncDelta(url, callback) {
     'use strict';
     syncList(url, {delta: true}, function (posts) {
-        async.mapSeries(posts, syncPost, function () {
+        async.eachSeries(posts, syncPost, function () {
             console.log('Done: ' + url);
             callback();
         });
@@ -795,7 +796,7 @@ function doSyncDelta(url, callback) {
 function doSync(url, callback) {
     'use strict';
     syncList(url, {delta: false}, function (posts) {
-        async.mapSeries(posts, syncPost, function () {
+        async.eachSeries(posts, syncPost, function () {
             console.log('Done: ' + url);
             callback();
         });
@@ -832,7 +833,7 @@ if (target === 'sync') {
             console.log(JSON.stringify(loginStatus, undefined, 4));
 
             if (loginStatus.success) {
-                async.mapSeries(listUrl, doSync, function () {
+                async.eachSeries(listUrl, doSync, function () {
                     fs.write(allPostsOutput, JSON.stringify(allPosts, undefined, 4), 'w');
                     console.log('Updated ' + allPostsOutput);
                     exit();
@@ -848,7 +849,7 @@ if (target === 'sync') {
 if (target === 'anonsync') {
     showConsoleMessage = false;
     anonsync = true;
-    async.mapSeries(listUrl, doSync, function () {
+    async.eachSeries(listUrl, doSync, function () {
         fs.write(allPostsOutput, JSON.stringify(allPosts, undefined, 4), 'w');
         console.log('Updated ' + allPostsOutput);
         exit();
@@ -858,7 +859,7 @@ if (target === 'anonsync') {
 if (target === 'anonsyncdelta') {
     showConsoleMessage = false;
     anonsync = true;
-    async.mapSeries(listUrl, doSyncDelta, function () {
+    async.eachSeries(listUrl, doSyncDelta, function () {
         fs.write(allPostsOutput, JSON.stringify(allPosts, undefined, 4), 'w');
         console.log('Updated ' + allPostsOutput);
         exit();
@@ -941,7 +942,7 @@ function doScreenShot() {
     });
     console.log(JSON.stringify(spamPostsUrl, undefined, 4));
     noImage = false;
-    async.mapSeries(spamPostsUrl, screenCapturePost, function () {
+    async.eachSeries(spamPostsUrl, screenCapturePost, function () {
         console.log('Done');
         exit();
     });
@@ -966,7 +967,7 @@ if (target === 'logipaddr') {
                     postUrl.push(entry.postUrl);
                 });
 
-                async.mapSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
+                async.eachSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
                     saveLocalIpAddrLog(function () {
                         console.log('Done');
                         exit();
@@ -997,9 +998,9 @@ if (target === 'deletespam') {
                     deleteUrl.push(entry.deleteUrl);
                 });
 
-                async.mapSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
+                async.eachSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
                     saveLocalIpAddrLog(function () {
-                        async.mapSeries(deleteUrl.sort().reverse(), deletePost, function () {
+                        async.eachSeries(deleteUrl.sort().reverse(), deletePost, function () {
                             console.log('Done');
                             exit();
                         });
