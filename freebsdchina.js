@@ -1,4 +1,5 @@
 /*global $, phantom, window */
+'use strict';
 
 var fs = require('fs'),
     async = require('./async'),
@@ -17,7 +18,7 @@ var listUrl = [
     'https://www.freebsdchina.org/forum/viewforum.php?f=58',
     // 'https://www.freebsdchina.org/forum/viewforum.php?f=46',
     'https://www.freebsdchina.org/forum/viewforum.php?f=64'
-    ];
+];
 
 var config = {},
     spambotIdsJson = fs.read('freebsdchina.spambotIds.json'),
@@ -28,12 +29,25 @@ var config = {},
     abortRequest = [],
     allPosts = [],
     allIpAddrLog = [],
+    loggedPostId = {},
     noImage = true,
     showConsoleMessage = true,
     anonsync = false,
-    cacheDir = 'cache',
-    testUrl = 'https://www.freebsdchina.org/forum/forum_27.html',
-    allPostsOutput = cacheDir + '/freebsdchina.posts.json',
+    cacheDir = '',
+    screenShotDir = '',
+    testUrl = 'https://www.freebsdchina.org/forum/forum_27.html';
+
+
+if (system.env.LOCAL_DATA_DIR) {
+    // console.log();
+    cacheDir = system.env.LOCAL_DATA_DIR + '/cache';
+    screenShotDir = system.env.LOCAL_DATA_DIR + '/screenshots';
+} else {
+    cacheDir = fs.workingDirectory + '/cache';
+    screenShotDir = fs.workingDirectory + '/screenshots';
+}
+
+var allPostsOutput = cacheDir + '/freebsdchina.posts.json',
     ipAddrOutput = cacheDir + '/freebsdchina.ipaddr.json',
     spamOutput = cacheDir + '/freebsdchina.spam.json',
     abortRequestOutput = cacheDir + '/freebsdchina.abortRqeuest.json';
@@ -44,8 +58,18 @@ config.login = JSON.parse(loginJson);
 page.viewportSize = defaultViewportSize;
 page.settings.userAgent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.42 Safari/537.36';
 
+function test() {
+    console.log('test');
+}
+
+function exit() {
+    if (abortRequest.length > 0) {
+        fs.write(abortRequestOutput, JSON.stringify(abortRequest, undefined, 4), 'w');
+    }
+    phantom.exit();
+}
+
 freebsdchina.checkRequestUrl = function (url) {
-    'use strict';
     var r = !url.match(/^http(?:s|):\/\/www\.freebsdchina\.org/);
     return r;
 };
@@ -61,7 +85,7 @@ function loadjQuery(callback) {
 
     if (load) {
         if (page.injectJs(jqueryJS)) {
-            console.log('loadjQuery: Loading ' + jqueryJS + ' successful');
+            // console.log('loadjQuery: Loading ' + jqueryJS + ' successful');
             callback();
         } else {
             console.log('loadjQuery: Loading ' + jqueryJS + ' failed');
@@ -76,7 +100,6 @@ function doPressKey(str) {
 }
 
 function doClickButton(pos, fix) {
-    'use strict';
     var button = {};
     if (pos.left > page.viewportSize.width) {
         page.viewportSize = { width: pos.left + 100, height: page.viewportSize.height };
@@ -93,23 +116,21 @@ function doClickButton(pos, fix) {
     button.left = pos.left + fix.left;
     button.top = pos.top + fix.top;
 
-    // console.log('doClickButton: page.viewportSize: ' + JSON.stringify(page.viewportSize, undefined, 4));
+    console.log('doClickButton: page.viewportSize: ' + JSON.stringify(page.viewportSize, undefined, 4));
     console.log('doClickButton: Clicking Button: ' + JSON.stringify(button, undefined, 4));
 
     // window.setTimeout(function () {
-        page.sendEvent('click', button.left, button.top);
-
-        if (
-            page.viewportSize.width !== defaultViewportSize.width ||
-                page.viewportSize.height !== defaultViewportSize.height
-        ) {
-            page.viewportSize = defaultViewportSize;
-        }
+    page.sendEvent('click', button.left, button.top);
+    if (
+        page.viewportSize.width !== defaultViewportSize.width ||
+            page.viewportSize.height !== defaultViewportSize.height
+    ) {
+        page.viewportSize = defaultViewportSize;
+    }
     // }, 2000);
 }
 
 freebsdchina.getLoginButton = function (url, callback) {
-    'use strict';
     page.open(url, function (status) {
         if (status === 'success') {
             loadjQuery(function () {
@@ -130,7 +151,6 @@ freebsdchina.getLoginButton = function (url, callback) {
 };
 
 freebsdchina.fetchList = function (url, callback) {
-    'use strict';
     page.open(url, function (status) {
         var result;
         if (status === 'success') {
@@ -217,7 +237,6 @@ freebsdchina.fetchList = function (url, callback) {
 };
 
 freebsdchina.fetchPost = function (url, callback, options) {
-    'use strict';
     var opt = JSON.stringify(options);
     page.open(url, function (status) {
         var result;
@@ -336,10 +355,9 @@ freebsdchina.fetchPost = function (url, callback, options) {
 };
 
 freebsdchina.loadLoginPage = function (callback) {
-    'use strict';
     freebsdchina.getLoginButton(testUrl, function (login) {
         // page.sendEvent('click', login.left + 3, login.top + 1);
-        doClickButton(login, { left: 3, top: 1 });
+        doClickButton(login, { left: 5, top: 5 });
 
         page.onLoadFinished = function (status) {
             if (status === 'success') {
@@ -350,7 +368,6 @@ freebsdchina.loadLoginPage = function (callback) {
 };
 
 freebsdchina.doLogin = function (callback) {
-    'use strict';
     freebsdchina.loadLoginPage(function () {
         console.log('DEBUG doLogin0: ' + page.frameUrl);
         if (page.frameUrl.match(/login\.php/)) {
@@ -367,32 +384,32 @@ freebsdchina.doLogin = function (callback) {
 
                 // page.sendEvent('click', r.username.left + 1, r.username.top);
                 async.series([
-                    function(callback) {
+                    function (callback) {
                         doClickButton(r.username, { left: 1, top: 0 });
                         callback(null, 'focus username');
                     },
-                    function(callback) {
+                    function (callback) {
                         // doPressKey(config.login.username);
                         page.sendEvent('keypress', config.login.username);
                         callback(null, 'type in username');
                     },
-                    function(callback) {
+                    function (callback) {
                         doClickButton(r.password, { left: 1, top: 0 });
                         callback(null, 'focus password');
                     },
-                    function(callback) {
+                    function (callback) {
                         page.sendEvent('keypress', config.login.password);
                         callback(null, 'type in password');
                     },
-                    function(callback) {
+                    function (callback) {
                         doClickButton(r.autologin, { left: 1, top: 0 });
                         callback(null, 'select autologin');
                     },
-                    function(callback) {
-                        page.render('login.png');
+                    function (callback) {
+                        // page.render(screenShotDir + '/login.png');
                         callback(null, 'screenshot');
                     },
-                    function(callback) {
+                    function (callback) {
                         doClickButton(r.login, { left: 3, top: 3 });
                         callback(null, 'click login button');
                     }
@@ -415,7 +432,6 @@ freebsdchina.doLogin = function (callback) {
 };
 
 freebsdchina.checkLoginStatus = function (callback) {
-    'use strict';
     if (page.frameUrl.match(/index\.php/)) {
         loadjQuery(function () {
             var result = page.evaluate(function (username) {
@@ -427,7 +443,7 @@ freebsdchina.checkLoginStatus = function (callback) {
                         return $(this).text().trim().match(/您上次访问时间是/);
                     }).get(0),
                     m,
-                    logoutUrl;
+                    logoutUrl,
                     urlMatch = false,
                     usernameMatch = false,
                     loginError = [];
@@ -467,7 +483,7 @@ freebsdchina.checkLoginStatus = function (callback) {
             callback(result);
         });
     } else {
-        page.render('test.png');
+        page.render(screenShotDir + '/test.png');
         console.log('checkLoginStatus: failed');
         window.setTimeout(function () {
             exit();
@@ -476,18 +492,17 @@ freebsdchina.checkLoginStatus = function (callback) {
 };
 
 freebsdchina.logIpAddr = function (postUrl, callback) {
-    'use strict';
     var m,
         postId,
         ipAddrButton,
         log;
 
     m = postUrl.match(/viewtopic\.php\?p=(\d+)#/);
-    if (m  && m[1]) {
+    if (m && m[1]) {
         postId = m[1];
 
         freebsdchina.fetchPost(postUrl, function () {
-            ipAddrButton =  page.evaluate(function (id) {
+            ipAddrButton = page.evaluate(function (id) {
                 var re = new RegExp('modcp\\.php\\?mode=ip&p=' + id);
                 return $('a[href*=modcp]').filter(function () {
                     return $(this).prop('href').match(re);
@@ -495,19 +510,38 @@ freebsdchina.logIpAddr = function (postUrl, callback) {
             }, postId);
             console.log('ipAddrButton: ' + JSON.stringify(ipAddrButton, undefined, 4));
 
+            // var l = page.evaluate(function (id) {
+            //     var re = new RegExp('modcp\\.php\\?mode=ip&p=' + id);
+            //     return $('a[href*=modcp]').filter(function () {
+            //         return $(this).prop('href').match(re);
+            //     }).prop('href');
+            // }, postId);
+            // console.log(l);
+
+            // page.evaluate(function (id) {
+            //     var re = new RegExp('modcp\\.php\\?mode=ip&p=' + id);
+            //     $('a[href*=modcp]').filter(function () {
+            //         return $(this).prop('href').match(re);
+            //     }).click();
+            // }, postId);
+
             if (
                 ipAddrButton &&
                     ipAddrButton.left > 0 &&
                     ipAddrButton.top > 0
             ) {
-                page.render('logipaddr.png');
-                // page.sendEvent('click', ipAddrButton.left + 1, ipAddrButton.top + 1);
-                doClickButton(ipAddrButton, { left: 1, top: 1 });
+                // page.render(screenShotDir + '/logipaddr.png');
+                page.render('/dev/null');
+                doClickButton(ipAddrButton, { left: 2, top: 1 });
 
                 page.onLoadFinished = function (status) {
                     if (status !== 'success') {
                         console.log('freebsdchina.logIpAddr failed: ' + status);
+                    } else {
+                        page.render(screenShotDir + '/logipaddr.png');
                     }
+
+                    // console.log(page.content);
 
                     loadjQuery(function () {
                         log = page.evaluate(function () {
@@ -519,9 +553,9 @@ freebsdchina.logIpAddr = function (postUrl, callback) {
                             }).each(function () {
                                 var text = $(this).text().trim(),
                                     match = text.match(/((?:\d{1,3}\.){3}\d{1,3})\s+\[\s+\d+\s+文章\s+\]/);
-                                if  (match && match[1]) {
+                                if (match && match[1]) {
                                     ipLog.addresses.push(match[1]);
-                                } else{
+                                } else {
                                     match = text.match(/(.*)\s+\[\s+\d+\s+文章\s+\]/);
                                     if (match && match[1]) {
                                         ipLog.author = match[1];
@@ -533,6 +567,7 @@ freebsdchina.logIpAddr = function (postUrl, callback) {
                         if (log.addresses.length > 0) {
                             log[postId] = log.addresses[0];
                         }
+                        console.log('freebsdchina.logIpAddr(): ' + JSON.stringify(log, undefined, 4));
                         allIpAddrLog.push(log);
                         callback();
                     });
@@ -541,13 +576,11 @@ freebsdchina.logIpAddr = function (postUrl, callback) {
                 console.log('freebsdchina.logIpAddr: ipAddrButton not found');
                 callback();
             }
-            
         }, {});
-    };
+    }
 };
 
 freebsdchina.deletePost = function (deleteUrl, callback) {
-    'use strict';
     page.open(deleteUrl, function (status) {
         var confirmButton;
         if (status === 'success') {
@@ -584,7 +617,6 @@ freebsdchina.deletePost = function (deleteUrl, callback) {
 };
 
 page.onResourceRequested = function (requestData, request) {
-    'use strict';
     var httpsUrl;
 
     if (freebsdchina.checkRequestUrl(requestData.url)) {
@@ -613,7 +645,6 @@ page.onResourceRequested = function (requestData, request) {
 };
 
 page.onResourceReceived = function (responseData) {
-    'use strict';
     if (responseData.stage === 'end') {
         if (responseData.url) {
             console.log('Received: ' + responseData.url);
@@ -627,12 +658,10 @@ page.onResourceReceived = function (responseData) {
 };
 
 // page.onUrlChanged = function (url) {
-//     'use strict';
 //     return;
 // };
 
 page.onConsoleMessage = function (msg) {
-    'use strict';
     if (showConsoleMessage) {
         system.stderr.writeLine('Page Console: ' + msg);
     }
@@ -640,11 +669,11 @@ page.onConsoleMessage = function (msg) {
 
 function time() {
     var t = new Date();
-    return (t.getTime()-t.getMilliseconds())/1000;
+    return (t.getTime() - t.getMilliseconds()) / 1000;
 }
 
 function loadSavedList(id) {
-    var re = new RegExp('freebsdchina.list.' + id + '\.(\\d+)\.json'),
+    var re = new RegExp('freebsdchina.list.' + id + '.(\\d+).json'),
         files = [];
 
     fs.list(cacheDir).forEach(function (entry) {
@@ -656,9 +685,7 @@ function loadSavedList(id) {
 }
 
 function syncList(url, listOpts, callback) {
-    'use strict';
     var listOutput,
-        listOutputTs,
         listDeltaOutput,
         previousListJSON,
         previousListTmp,
@@ -744,7 +771,6 @@ function syncList(url, listOpts, callback) {
 }
 
 function syncPost(url, callback) {
-    'use strict';
     freebsdchina.fetchPost(url, function (post) {
         post.forEach(function (entry) {
             // add deleteUrl and editUrl for anonsync
@@ -759,7 +785,6 @@ function syncPost(url, callback) {
 }
 
 function screenCapturePost(url, callback) {
-    'use strict';
     var m, postId;
     m = url.match(/viewtopic\.php\?p=(\d+)#/);
     if (m  && m[1]) {
@@ -767,7 +792,7 @@ function screenCapturePost(url, callback) {
 
         freebsdchina.fetchPost(url, function () {
             window.setTimeout(function () {
-                page.render(postId + '.jpg', {format: 'jpeg'});
+                page.render(screenShotDir + '/' + postId + '.jpg', {format: 'jpeg'});
                 callback();
             }, 10000);
         }, {'postId': postId, 'idTag': true});
@@ -775,7 +800,6 @@ function screenCapturePost(url, callback) {
 }
 
 function deletePost(url, callback) {
-    'use strict';
     console.log('deletePost: ' + url);
     freebsdchina.deletePost(url, function () {
         page.onLoadFinished = function () { return; };
@@ -784,7 +808,6 @@ function deletePost(url, callback) {
 }
 
 function doSyncDelta(url, callback) {
-    'use strict';
     syncList(url, {delta: true}, function (posts) {
         async.eachSeries(posts, syncPost, function () {
             console.log('Done: ' + url);
@@ -794,7 +817,6 @@ function doSyncDelta(url, callback) {
 }
 
 function doSync(url, callback) {
-    'use strict';
     syncList(url, {delta: false}, function (posts) {
         async.eachSeries(posts, syncPost, function () {
             console.log('Done: ' + url);
@@ -803,13 +825,6 @@ function doSync(url, callback) {
     });
 }
 
-function exit() {
-    'use strict';
-    if (abortRequest.length > 0) {
-        fs.write(abortRequestOutput, JSON.stringify(abortRequest, undefined, 4), 'w');
-    }
-    phantom.exit();
-}
 
 if (system.args.length !== 2) {
     console.log('Usage: test_freebsdchina.js target');
@@ -823,12 +838,18 @@ if (!fs.exists(cacheDir)) {
     }
 }
 
+if (!fs.exists(screenShotDir)) {
+    if (fs.makeDirectory(screenShotDir) !== true) {
+        console.log('mkdir ' + screenShotDir + ' failed');
+        phantom.exit(1);
+    }
+}
+
 var target = system.args[1];
 
 if (target === 'sync') {
     showConsoleMessage = false;
     freebsdchina.doLogin(function () {
-        'use strict';
         freebsdchina.checkLoginStatus(function (loginStatus) {
             console.log(JSON.stringify(loginStatus, undefined, 4));
 
@@ -867,7 +888,6 @@ if (target === 'anonsyncdelta') {
 }
 
 function saveLocalIpAddrLog(callback) {
-    'use strict';
     var ipLogJSON,
         ipLog = {};
 
@@ -876,19 +896,31 @@ function saveLocalIpAddrLog(callback) {
             ipLogJSON = fs.read(ipAddrOutput);
             ipLog = JSON.parse(ipLogJSON);
         }
+        // console.log(JSON.stringify(allIpAddrLog, undefined, 4));
 
         allIpAddrLog.forEach(function (log) {
             var author = log.author;
             if (ipLog.hasOwnProperty(author)) {
-                log.addresses.forEach(function (ipaddr) {
-                    if (ipLog[author].addresses.indexOf(ipaddr) === -1) {
-                        ipLog[author].addresses.push(ipaddr);
-                    }
-                });
+                // log.addresses.forEach(function (ipaddr) {
+                //     console.log('saveLocalIpAddrLog: ' + author);
+                //     console.log('saveLocalIpAddrLog: ' + ipaddr);
+                //     console.log('saveLocalIpAddrLog: ' + ipLog[author].addresses.indexOf(ipaddr));
+                //     if (ipLog[author].addresses.indexOf(ipaddr) === -1) {
+                //         try {
+                //             ipLog[author].addresses.push(ipaddr);
+                //         } catch (e) {
+                //             if (e instanceof RangeError) {
+                //                 fs.write('debug0.json', JSON.stringify(allIpAddrLog, undefined, 4));
+                //                 fs.write('debug1.json', JSON.stringify(ipLog, undefined, 4));
+                //                 phantom.exit(1);
+                //             }
+                //         }
+                //     }
+                // });
             } else {
                 ipLog[author] = {};
                 ipLog[author].posts = {};
-                ipLog[author].addresses = log.addresses;
+                // ipLog[author].addresses = log.addresses;
             }
 
             Object.keys(log).forEach(function (k) {
@@ -899,13 +931,14 @@ function saveLocalIpAddrLog(callback) {
                 }
             });
         });
+
+        console.log('Saving to ' + ipAddrOutput);
         fs.write(ipAddrOutput, JSON.stringify(ipLog, undefined, 4));
     }
     callback();
 }
 
 function doListSpam() {
-    'use strict';
     var postsJSON = fs.read(allPostsOutput),
         posts = JSON.parse(postsJSON),
         spamPosts = [];
@@ -917,6 +950,7 @@ function doListSpam() {
     });
     fs.write(spamOutput, JSON.stringify(spamPosts, undefined, 4), 'w');
     console.log('Updated ' + spamOutput);
+    console.log(JSON.stringify(spamPosts, undefined, 4));
     phantom.exit();
 }
 
@@ -924,15 +958,67 @@ if (target === 'listspam') {
     doListSpam();
 }
 
-function doLogIpAddr(postUrl, callback) {
-    freebsdchina.logIpAddr(postUrl, function () {
-        page.onLoadFinished = function () { return; };
-        callback();
+function loadIpAddrLog(callback) {
+    var ipLogJSON,
+        ipLog = {};
+
+    if (fs.exists(ipAddrOutput)) {
+        ipLogJSON = fs.read(ipAddrOutput);
+        ipLog = JSON.parse(ipLogJSON);
+    }
+
+    Object.keys(ipLog).forEach(function (author) {
+        Object.keys(ipLog[author].posts).forEach(function (postId) {
+            loggedPostId[postId] = ipLog[author].posts[postId];
+        });
     });
+    console.log(ipAddrOutput + ': Found ' + Object.keys(loggedPostId).length);
+    callback();
+}
+
+// function loadIpAddrLogByPostUrl(postUrl, callback) {
+//     var m,
+//         postId,
+//         ipLogJSON,
+//         ipLog = {};
+//     if (fs.exists(ipAddrOutput)) {
+//         ipLogJSON = fs.read(ipAddrOutput);
+//         ipLog = JSON.parse(ipLogJSON);
+//     }
+//     m = postUrl.match(/viewtopic\.php\?p=(\d+)#/);
+//     if (m && m[1]) {
+//         postId = m[1];
+//         Object.keys(ipLog).forEach(function (author) {
+//             if (ipLog[author].posts.hasOwnProperty(postId)) {
+//             }
+//         });
+//     }
+//     callback();
+// }
+
+function doLogIpAddr(postUrl, callback) {
+    var m,
+        postId;
+
+    m = postUrl.match(/viewtopic\.php\?p=(\d+)#/);
+    if (m && m[1]) {
+        postId = m[1];
+
+        if (loggedPostId.hasOwnProperty(postId)) {
+            console.log('Found PostId: ' + postId + ' => ' + loggedPostId[postId]);
+            callback();
+        } else {
+            freebsdchina.logIpAddr(postUrl, function () {
+                page.onLoadFinished = function () { return; };
+                saveLocalIpAddrLog(function () {
+                    callback();
+                });
+            });
+        }
+    }
 }
 
 function doScreenShot() {
-    'use strict';
     var postsJSON = fs.read(spamOutput),
         posts = JSON.parse(postsJSON),
         spamPostsUrl = [];
@@ -955,7 +1041,6 @@ if (target === 'screenshot') {
 if (target === 'logipaddr') {
     // noImage = false;
     freebsdchina.doLogin(function () {
-        'use strict';
         freebsdchina.checkLoginStatus(function (loginStatus) {
             console.log(JSON.stringify(loginStatus, undefined, 4));
             if (loginStatus.success) {
@@ -982,8 +1067,8 @@ if (target === 'logipaddr') {
 }
 
 if (target === 'deletespam') {
+    showConsoleMessage = false;
     freebsdchina.doLogin(function () {
-        'use strict';
         freebsdchina.checkLoginStatus(function (loginStatus) {
             console.log(JSON.stringify(loginStatus, undefined, 4));
             if (loginStatus.success) {
@@ -998,8 +1083,8 @@ if (target === 'deletespam') {
                     deleteUrl.push(entry.deleteUrl);
                 });
 
-                async.eachSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
-                    saveLocalIpAddrLog(function () {
+                loadIpAddrLog(function () {
+                    async.eachSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
                         async.eachSeries(deleteUrl.sort().reverse(), deletePost, function () {
                             console.log('Done');
                             exit();
