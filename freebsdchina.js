@@ -1067,35 +1067,41 @@ if (target === 'logipaddr') {
 }
 
 if (target === 'deletespam') {
-    showConsoleMessage = false;
-    freebsdchina.doLogin(function () {
-        freebsdchina.checkLoginStatus(function (loginStatus) {
-            console.log(JSON.stringify(loginStatus, undefined, 4));
-            if (loginStatus.success) {
+    var spamPosts = fs.read(spamOutput),
+        posts = JSON.parse(spamPosts);
 
-                var spamPosts = fs.read(spamOutput),
-                    posts = JSON.parse(spamPosts),
-                    postUrl = [],
-                    deleteUrl =  [];
+    if (posts.length > 0) {
+        showConsoleMessage = false;
+        freebsdchina.doLogin(function () {
+            freebsdchina.checkLoginStatus(function (loginStatus) {
+                console.log(JSON.stringify(loginStatus, undefined, 4));
+                if (loginStatus.success) {
 
-                posts.forEach(function (entry) {
-                    postUrl.push(entry.postUrl);
-                    deleteUrl.push(entry.deleteUrl);
-                });
+                    var postUrl = [],
+                        deleteUrl =  [];
 
-                loadIpAddrLog(function () {
-                    async.eachSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
-                        async.eachSeries(deleteUrl.sort().reverse(), deletePost, function () {
-                            console.log('Done');
-                            exit();
+                    posts.forEach(function (entry) {
+                        postUrl.push(entry.postUrl);
+                        deleteUrl.push(entry.deleteUrl);
+                    });
+
+                    loadIpAddrLog(function () {
+                        async.eachSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
+                            async.eachSeries(deleteUrl.sort().reverse(), deletePost, function () {
+                                console.log('Done');
+                                exit();
+                            });
                         });
                     });
-                });
-            } else {
-                console.log('login failed');
-                exit();
-            }
+                } else {
+                    console.log('Login Failed');
+                    exit();
+                }
+            });
         });
-    });
+    } else {
+        console.log('No Spam Found');
+        exit();
+    }
 }
 
