@@ -370,7 +370,9 @@ freebsdchina.loadLoginPage = function (callback) {
 freebsdchina.doLogin = function (callback) {
     freebsdchina.loadLoginPage(function () {
         console.log('DEBUG doLogin0: ' + page.frameUrl);
-        if (page.frameUrl.match(/login\.php/)) {
+        console.log('DEBUG doLogin0: ' + page.url);
+        // if (page.frameUrl.match(/login\.php/)) {
+        if (page.url.match(/login\.php/)) {
             loadjQuery(function () {
                 var r =  page.evaluate(function () {
                     var pos = {};
@@ -432,7 +434,8 @@ freebsdchina.doLogin = function (callback) {
 };
 
 freebsdchina.checkLoginStatus = function (callback) {
-    if (page.frameUrl.match(/index\.php/)) {
+    // if (page.frameUrl.match(/index\.php/)) {
+    if (page.url.match(/index\.php/)) {
         loadjQuery(function () {
             var result = page.evaluate(function (username) {
                 var testLogin = {},
@@ -497,7 +500,7 @@ freebsdchina.logIpAddr = function (postUrl, callback) {
         ipAddrButton,
         log;
 
-    m = postUrl.match(/viewtopic\.php\?p=(\d+)#/);
+    m = postUrl.match(/viewtopic\.php\?p=(\d+)/);
     if (m && m[1]) {
         postId = m[1];
 
@@ -1000,7 +1003,7 @@ function doLogIpAddr(postUrl, callback) {
     var m,
         postId;
 
-    m = postUrl.match(/viewtopic\.php\?p=(\d+)#/);
+    m = postUrl.match(/viewtopic\.php\?p=(\d+)/);
     if (m && m[1]) {
         postId = m[1];
 
@@ -1015,6 +1018,8 @@ function doLogIpAddr(postUrl, callback) {
                 });
             });
         }
+    } else {
+        console.log('doLogIpAddr(): postUrl not match: ' + postUrl);
     }
 }
 
@@ -1085,6 +1090,7 @@ if (target === 'deletespam') {
                         deleteUrl.push(entry.deleteUrl);
                     });
 
+                    console.log(JSON.stringify(postUrl.sort().reverse(), undefined, 4));
                     loadIpAddrLog(function () {
                         async.eachSeries(postUrl.sort().reverse(), doLogIpAddr, function () {
                             async.eachSeries(deleteUrl.sort().reverse(), deletePost, function () {
